@@ -1,0 +1,125 @@
+---
+name: Tests
+
+on:
+  push:
+
+jobs:
+  Linux:
+    name: ${{ matrix.box }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        box:
+          - generic/arch
+      fail-fast: false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set `CPUS`
+        run: |
+          echo "CPUS=$(nproc)" >> ${GITHUB_ENV}
+
+      - name: Provision VM
+        uses: ./
+        with:
+          box: ${{ matrix.box }}
+          cpus: ${{ env.CPUS }}
+
+      - name: Run Test (/etc/os-release) (VM)
+        run: |
+          source /etc/os-release
+          if [ "${NAME}" = "Arch Linux" ]; then
+            echo "Arch Linux detected."
+          else
+            echo "Arch Linux not detected."
+            exit 1
+          fi
+        shell: bash --noprofile --norc -euo pipefail {0}
+
+      - name: Run Test (/etc/os-release) (Host)
+        run: |
+          source /etc/os-release
+          if [ "${NAME}" = "Arch Linux" ]; then
+            echo "Arch Linux detected."
+            exit 1
+          else
+            echo "Arch Linux not detected."
+          fi
+        shell: /bin/bash --noprofile --norc -euo pipefail {0}
+
+      - name: Prepare Test (working-directory) (VM)
+        run: |
+          mkdir new_working_directory
+        shell: bash --noprofile --norc -euo pipefail {0}
+
+      - name: Run Test (working-directory) (VM)
+        run: |
+          if [ "$(basename ${PWD})" = "new_working_directory" ]; then
+            echo "Expected working directory detected."
+          else
+            echo "Expected working directory not detected."
+            exit 1
+          fi
+        shell: bash --noprofile --norc -euo pipefail {0}
+        working-directory: new_working_directory
+
+  macOS:
+    name: ${{ matrix.box }}
+    runs-on: macos-13
+    strategy:
+      matrix:
+        box:
+          - generic/arch
+      fail-fast: false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set `CPUS`
+        run: |
+          echo "CPUS=$(getconf _NPROCESSORS_ONLN)" >> ${GITHUB_ENV}
+
+      - name: Provision VM
+        uses: ./
+        with:
+          box: ${{ matrix.box }}
+          cpus: ${{ env.CPUS }}
+
+      - name: Run Test (/etc/os-release) (VM)
+        run: |
+          source /etc/os-release
+          if [ "${NAME}" = "Arch Linux" ]; then
+            echo "Arch Linux detected."
+          else
+            echo "Arch Linux not detected."
+            exit 1
+          fi
+        shell: bash --noprofile --norc -euo pipefail {0}
+
+      - name: Run Test (uname) (Host)
+        run: |
+          if [ "$(uname -s)" = "Darwin" ]; then
+            echo "Darwin detected."
+          else
+            echo "Darwin not detected."
+            exit 1
+          fi
+        shell: /bin/bash --noprofile --norc -euo pipefail {0}
+
+      - name: Prepare Test (working-directory) (VM)
+        run: |
+          mkdir new_working_directory
+        shell: bash --noprofile --norc -euo pipefail {0}
+
+      - name: Run Test (working-directory) (VM)
+        run: |
+          if [ "$(basename ${PWD})" = "new_working_directory" ]; then
+            echo "Expected working directory detected."
+          else
+            echo "Expected working directory not detected."
+            exit 1
+          fi
+        shell: bash --noprofile --norc -euo pipefail {0}
+        working-directory: new_working_directory

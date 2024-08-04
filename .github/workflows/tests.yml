@@ -71,7 +71,7 @@ jobs:
     strategy:
       matrix:
         box:
-          - generic/arch
+          - generic/debian12
       fail-fast: false
     steps:
       - name: Checkout code

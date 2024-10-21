@@ -38,6 +38,12 @@ inputs:
       find ${{ runner.temp }} -mindepth 1 -delete;
     description: Command(s) to run before packaging Vagrant Box (double quotation marks are not allowed)
     type: string
+  provider:
+    description: Vagrant provider to use, defaults to libvirt on Linux and virtualbox on macOS
+    options:
+      - libvirt
+      - virtualbox
+    type: string
   provision_commands:
     default: >-
       echo 'AcceptEnv *' >> /etc/ssh/sshd_config;
@@ -66,24 +72,74 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Set `PROVIDER` (Linux)
+      run: |
+        echo "PROVIDER=${{ inputs.provider || 'libvirt' }}" >> ${GITHUB_ENV}
+      shell: bash
+      if: runner.os == 'Linux'
+
+    - name: Set `PROVIDER` (macOS)
+      run: |
+        echo "PROVIDER=${{ inputs.provider || 'virtualbox' }}" >> ${GITHUB_ENV}
+      shell: bash
+      if: runner.os == 'macOS'
+
     - name: Install/Upgrade Vagrant (Linux)
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
         sudo apt-get update
         sudo apt-get --yes install \
-          libvirt-daemon-system \
-          qemu \
-          vagrant \
-          virtualbox
+          vagrant
       shell: bash
       if: runner.os == 'Linux'
 
+    - name: Install/Configure Provider Dependencies (Linux) (libvirt)
+      env:
+        DEBIAN_FRONTEND: noninteractive
+      run: |
+        sudo apt-get --yes install \
+          libvirt-daemon-system \
+          qemu
+        sudo setfacl -m user:$USER:rw /var/run/libvirt/libvirt-sock
+      shell: bash
+      if: runner.os == 'Linux' && env.PROVIDER == 'libvirt'
+
+    - name: Install/Configure Provider Dependencies (Linux) (virtualbox)
+      env:
+        DEBIAN_FRONTEND: noninteractive
+      run: |
+        sudo apt-get --yes install \
+          virtualbox
+      shell: bash
+      if: runner.os == 'Linux' && env.PROVIDER == 'virtualbox'
+
     - name: Install/Upgrade Vagrant (macOS)
       run: |
-        brew install --cask --force --quiet vagrant virtualbox
+        brew install --cask --force --quiet \
+          vagrant
       shell: bash
       if: runner.os == 'macOS'
+
+    - name: Install/Configure Provider Dependencies (macOS) (libvirt)
+      run: |
+        brew install --force --quiet \
+          libvirt \
+          iproute2mac \
+          qemu
+        brew services start libvirt
+        echo "LIBVIRT_DEFAULT_URI=qemu:///session?socket=${HOME}/.cache/libvirt/libvirt-sock" >> ${GITHUB_ENV}
+      shell: bash
+      if: runner.os == 'macOS' && env.PROVIDER == 'libvirt'
+
+    - name: Install/Configure Provider Dependencies (macOS) (virtualbox)
+      run: |
+        brew install --cask --force --quiet \
+          virtualbox
+        # Fix for Vagrant 2.4.1 with VirtualBox 7.1
+        sudo sed -i.bak 's/"7.0" => Version_7_0,/"7.0" => Version_7_0,"7.1" => Version_7_0,/g' $(find /opt/vagrant -name meta.rb | grep virtualbox)
+      shell: bash
+      if: runner.os == 'macOS' && env.PROVIDER == 'virtualbox'
 
     - name: Cache Vagrant Box
       if: inputs.save_box_to_cache
@@ -100,14 +156,13 @@ runs:
         fi
       shell: bash
 
-    - name: Install Vagrant libvirt Plugin (Linux)
+    - name: Install Vagrant libvirt Plugin (libvirt)
       run: |
         vagrant plugin install vagrant-libvirt
-        sudo setfacl -m user:$USER:rw /var/run/libvirt/libvirt-sock
       shell: bash
-      if: runner.os == 'Linux'
+      if: env.PROVIDER == 'libvirt'
 
-    - name: Generate Vagrantfile (Linux)
+    - name: Generate Vagrantfile
       run: |
         cat > Vagrantfile <<EOF
           Vagrant.configure("2") do |config|
@@ -119,9 +174,9 @@ runs:
             config.vm.boot_timeout = ${{ inputs.boot_timeout }}
             config.vm.box = "${{ inputs.box }}"
             config.vm.box_check_update = false
-            config.vm.provider :libvirt do |v|
+            config.vm.provider :${{ env.PROVIDER }} do |v|
               v.cpus = ${{ inputs.cpus }}
-              v.driver = "kvm"
+              ${{ (runner.os == 'Linux' && env.PROVIDER == 'libvirt') && 'v.driver = "kvm"' || '' }}
               v.memory = ${{ inputs.memory }}
             end
             config.vm.provision "shell", inline: "${{ inputs.provision_commands }}"
@@ -129,47 +184,16 @@ runs:
           end
         EOF
       shell: bash
-      if: runner.os == 'Linux'
-
-    - name: Generate Vagrantfile (macOS)
-      run: |
-        cat > Vagrantfile <<EOF
-          Vagrant.configure("2") do |config|
-            config.ssh.compression = false
-            config.ssh.connect_timeout = ${{ inputs.connect_timeout }}
-            config.ssh.forward_env = ["*"]
-            config.ssh.shell = "bash"
-            config.ssh.username = "${{ inputs.vagrant_ssh_username }}"
-            config.vm.boot_timeout = ${{ inputs.boot_timeout }}
-            config.vm.box = "${{ inputs.box }}"
-            config.vm.box_check_update = false
-            config.vm.provider :virtualbox do |v|
-              v.cpus = ${{ inputs.cpus }}
-              v.memory = ${{ inputs.memory }}
-            end
-            config.vm.provision "shell", inline: "${{ inputs.provision_commands }}"
-            config.vm.synced_folder ".", "/vagrant", disabled: true
-          end
-        EOF
-      shell: bash
-      if: runner.os == 'macOS'
 
     - name: Show Vagrant Status
       run: |
         vagrant status
       shell: bash
 
-    - name: Start Vagrant Environment (Linux)
+    - name: Start Vagrant Environment
       run: |
-        vagrant up --provider libvirt
+        vagrant up --provider ${{ env.PROVIDER }}
       shell: bash
-      if: runner.os == 'Linux'
-
-    - name: Start Vagrant Environment (macOS)
-      run: |
-        vagrant up
-      shell: bash
-      if: runner.os == 'macOS'
 
     - name: Save OpenSSH configuration to ~/.ssh/config
       run: |

@@ -6,12 +6,15 @@ on:
 
 jobs:
   Linux:
-    name: ${{ matrix.box }}
+    name: Linux (${{ matrix.box }}) (${{ matrix.provider }})
     runs-on: ubuntu-latest
     strategy:
       matrix:
         box:
           - generic/arch
+        provider:
+          - libvirt
+          - virtualbox
       fail-fast: false
     steps:
       - name: Checkout code
@@ -26,6 +29,7 @@ jobs:
         with:
           box: ${{ matrix.box }}
           cpus: ${{ env.CPUS }}
+          provider: ${{ matrix.provider }}
 
       - name: Run Test (/etc/os-release) (VM)
         run: |
@@ -66,12 +70,15 @@ jobs:
         working-directory: new_working_directory
 
   macOS:
-    name: ${{ matrix.box }}
+    name: macOS (${{ matrix.box }}) (${{ matrix.provider }})
     runs-on: macos-13
     strategy:
       matrix:
         box:
           - generic/arch
+        provider:
+          - libvirt
+          - virtualbox
       fail-fast: false
     steps:
       - name: Checkout code
@@ -86,6 +93,7 @@ jobs:
         with:
           box: ${{ matrix.box }}
           cpus: ${{ env.CPUS }}
+          provider: ${{ matrix.provider }}
 
       - name: Run Test (/etc/os-release) (VM)
         run: |

@@ -12,7 +12,7 @@ This action allows the running of command-line programs via the `bash` shell of 
 1. Provision a `VM` using the specified `box` (with 2 CPUs & 2GB of RAM)
     ```yaml
     - name: Provision VM
-      uses: hummeltech/vagrant-action@v1
+      uses: hummeltech/vagrant-action@v2
       with:
         box: generic/arch
         cpus: 2

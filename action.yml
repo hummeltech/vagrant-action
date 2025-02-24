@@ -43,7 +43,7 @@ inputs:
     options:
       - libvirt
       - virtualbox
-    type: string
+    type: choice
   provision_commands:
     default: >-
       echo 'AcceptEnv *' >> /etc/ssh/sshd_config;

@@ -88,6 +88,8 @@ runs:
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
+        curl https://apt.releases.hashicorp.com/gpg | gpg --dearmor | sudo tee /usr/share/keyrings/hashicorp-archive-keyring.gpg
+        echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
         sudo apt-get update
         sudo apt-get --yes install \
           vagrant
@@ -100,7 +102,8 @@ runs:
       run: |
         sudo apt-get --yes install \
           libvirt-daemon-system \
-          qemu
+          libvirt-dev \
+          qemu-system
         sudo setfacl -m user:$USER:rw /var/run/libvirt/libvirt-sock
       shell: bash
       if: runner.os == 'Linux' && env.PROVIDER == 'libvirt'

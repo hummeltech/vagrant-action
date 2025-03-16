@@ -5,8 +5,72 @@ on:
   push:
 
 jobs:
-  Linux:
-    name: Linux (${{ matrix.box }}) (${{ matrix.provider }})
+  Ubuntu2204:
+    name: Ubuntu 22.04 (${{ matrix.box }}) (${{ matrix.provider }})
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        box:
+          - generic/arch
+        provider:
+          - libvirt
+          - virtualbox
+      fail-fast: false
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set `CPUS`
+        run: |
+          echo "CPUS=$(nproc)" >> ${GITHUB_ENV}
+
+      - name: Provision VM
+        uses: ./
+        with:
+          box: ${{ matrix.box }}
+          cpus: ${{ env.CPUS }}
+          provider: ${{ matrix.provider }}
+
+      - name: Run Test (/etc/os-release) (VM)
+        run: |
+          source /etc/os-release
+          if [ "${NAME}" = "Arch Linux" ]; then
+            echo "Arch Linux detected."
+          else
+            echo "Arch Linux not detected."
+            exit 1
+          fi
+        shell: bash --noprofile --norc -euo pipefail {0}
+
+      - name: Run Test (/etc/os-release) (Host)
+        run: |
+          source /etc/os-release
+          if [ "${NAME}" = "Arch Linux" ]; then
+            echo "Arch Linux detected."
+            exit 1
+          else
+            echo "Arch Linux not detected."
+          fi
+        shell: /bin/bash --noprofile --norc -euo pipefail {0}
+
+      - name: Prepare Test (working-directory) (VM)
+        run: |
+          mkdir new_working_directory
+        shell: bash --noprofile --norc -euo pipefail {0}
+
+      - name: Run Test (working-directory) (VM)
+        run: |
+          if [ "$(basename ${PWD})" = "new_working_directory" ]; then
+            echo "Expected working directory detected."
+          else
+            echo "Expected working directory not detected."
+            exit 1
+          fi
+        shell: bash --noprofile --norc -euo pipefail {0}
+        working-directory: new_working_directory
+
+  UbuntuLatest:
+    name: Ubuntu Latest (${{ matrix.box }}) (${{ matrix.provider }})
     runs-on: ubuntu-latest
     strategy:
       matrix:

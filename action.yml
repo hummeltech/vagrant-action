@@ -43,7 +43,7 @@ inputs:
     options:
       - libvirt
       - virtualbox
-    type: string
+    type: choice
   provision_commands:
     default: >-
       echo 'AcceptEnv *' >> /etc/ssh/sshd_config;
@@ -88,9 +88,18 @@ runs:
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
+        if [ "${ImageOS}" = "ubuntu24" ]; then
+          # Ubuntu 24.04 no longer provides Vagrant, install from Hashicorp
+          sudo bash -c 'curl --silent https://apt.releases.hashicorp.com/gpg | gpg --dearmor > /usr/share/keyrings/hashicorp-archive-keyring.gpg'
+          sudo bash -c 'echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com '$(lsb_release -cs)' main" > /etc/apt/sources.list.d/hashicorp.list'
+        fi
         sudo apt-get update
         sudo apt-get --yes install \
           vagrant
+        if [ "${ImageOS}" = "ubuntu24" ]; then
+          # Vagrant from Hashicorp installs a bash wrapper
+          sudo ln --force --symbolic /opt/vagrant/bin/vagrant /usr/bin/vagrant
+        fi
       shell: bash
       if: runner.os == 'Linux'
 
@@ -100,7 +109,8 @@ runs:
       run: |
         sudo apt-get --yes install \
           libvirt-daemon-system \
-          qemu
+          libvirt-dev \
+          qemu-system
         sudo setfacl -m user:$USER:rw /var/run/libvirt/libvirt-sock
       shell: bash
       if: runner.os == 'Linux' && env.PROVIDER == 'libvirt'
@@ -203,21 +213,25 @@ runs:
 
     - name: Generate /bin/bash override script
       run: |
-        echo "#!/bin/bash" | sudo tee /usr/local/bin/bash
-        echo "SCRIPT=\$(mktemp)" | sudo tee -a /usr/local/bin/bash
-        echo "echo \"#!/usr/bin/env bash\" >> \${SCRIPT}" | sudo tee -a /usr/local/bin/bash
-        echo "echo \"cd \${PWD}\" >> \${SCRIPT}" | sudo tee -a /usr/local/bin/bash
-        echo "echo \"set -euxo pipefail\" >> \${SCRIPT}" | sudo tee -a /usr/local/bin/bash
-        echo "echo \"bash \$@\" >> \${SCRIPT}" | sudo tee -a /usr/local/bin/bash
-        echo "mv \${SCRIPT} ${{ runner.temp }}/command.sh" | sudo tee -a /usr/local/bin/bash
-        echo "chmod a+x ${{ runner.temp }}/command.sh" | sudo tee -a /usr/local/bin/bash
-        echo "rsync --archive --delete ${{ github.workspace }}/ vagrantbox:${{ github.workspace }}/" | sudo tee -a /usr/local/bin/bash
-        echo "rsync --archive --delete ${{ runner.temp }}/ vagrantbox:${{ runner.temp }}/" | sudo tee -a /usr/local/bin/bash
-        echo "vagrant ssh --command \"${{ runner.temp }}/command.sh\"" | sudo tee -a /usr/local/bin/bash
-        echo "EXIT_STATUS=\$?" | sudo tee -a /usr/local/bin/bash
-        echo "rsync --archive --delete vagrantbox:${{ github.workspace }}/ ${{ github.workspace }}/" | sudo tee -a /usr/local/bin/bash
-        echo "rsync --archive --delete vagrantbox:${{ runner.temp }}/ ${{ runner.temp }}/" | sudo tee -a /usr/local/bin/bash
-        echo "exit \${EXIT_STATUS}" | sudo tee -a /usr/local/bin/bash
+        cat > bash <<EOF
+        #!/bin/bash
+        set -euxo pipefail
+        SCRIPT=\$(mktemp)
+        echo "#!/usr/bin/env bash" >> \${SCRIPT}
+        echo "cd \${PWD}" >> \${SCRIPT}
+        echo "set -euxo pipefail" >> \${SCRIPT}
+        echo "bash \$@" >> \${SCRIPT}
+        mv \${SCRIPT} ${{ runner.temp }}/command.sh
+        chmod a+x ${{ runner.temp }}/command.sh
+        rsync --archive --delete ${{ github.workspace }}/ vagrantbox:${{ github.workspace }}/
+        rsync --archive --delete ${{ runner.temp }}/ vagrantbox:${{ runner.temp }}/
+        vagrant ssh --command "${{ runner.temp }}/command.sh"
+        EXIT_STATUS=\$?
+        rsync --archive --delete vagrantbox:${{ github.workspace }}/ ${{ github.workspace }}/
+        rsync --archive --delete vagrantbox:${{ runner.temp }}/ ${{ runner.temp }}/
+        exit \${EXIT_STATUS}
+        EOF
+        sudo mv bash /usr/local/bin/bash
         sudo chmod +x /usr/local/bin/bash
       shell: bash
 
@@ -227,7 +241,7 @@ runs:
       with:
         post: >-
           if [ ! -f ${{ inputs.vagrant_box_descriptor }} ]; then
-          vagrant ssh --command "${{ inputs.pre_package_commands }}";
-          vagrant package --output ${{ inputs.vagrant_box_descriptor }};
+            vagrant ssh --command "${{ inputs.pre_package_commands }}";
+            vagrant package --output ${{ inputs.vagrant_box_descriptor }};
           fi
         post-shell: /bin/bash

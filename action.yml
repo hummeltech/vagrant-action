@@ -241,7 +241,7 @@ runs:
       with:
         post: >-
           if [ ! -f ${{ inputs.vagrant_box_descriptor }} ]; then
-            vagrant ssh --command "${{ inputs.pre_package_commands }}";
-            vagrant package --output ${{ inputs.vagrant_box_descriptor }};
+          vagrant ssh --command "${{ inputs.pre_package_commands }}";
+          vagrant package --output ${{ inputs.vagrant_box_descriptor }};
           fi
         post-shell: /bin/bash

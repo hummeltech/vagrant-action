@@ -108,6 +108,7 @@ runs:
         DEBIAN_FRONTEND: noninteractive
       run: |
         sudo apt-get --yes install \
+          libguestfs-tools \
           libvirt-daemon-system \
           libvirt-dev \
           qemu-system

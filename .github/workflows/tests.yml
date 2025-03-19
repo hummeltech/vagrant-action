@@ -18,6 +18,13 @@ jobs:
         runs-on:
           - ubuntu-22.04
           - ubuntu-latest
+        save_box_to_cache:
+          - false
+        include:
+          - box: generic/arch
+            provider: libvirt
+            runs-on: ubuntu-latest
+            save_box_to_cache: true
       fail-fast: false
     steps:
       - name: Checkout code
@@ -33,6 +40,7 @@ jobs:
           box: ${{ matrix.box }}
           cpus: ${{ env.CPUS }}
           provider: ${{ matrix.provider }}
+          save_box_to_cache: ${{ matrix.save_box_to_cache }}
 
       - name: Run Test (/etc/os-release) (VM)
         run: |

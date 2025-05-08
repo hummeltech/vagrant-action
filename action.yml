@@ -88,7 +88,7 @@ runs:
       shell: bash
       if: runner.os == 'macOS'
 
-    - uses: abbbi/github-actions-tune@v1
+    - uses: abbbi/github-actions-tune@81fb919e588c20b7ab52b2cac097d2efd765c714
       if: runner.os == 'Linux'
 
     - name: Pre-install Vagrant (Linux)
@@ -97,19 +97,20 @@ runs:
           # Ubuntu 24.04 no longer provides Vagrant, install from Hashicorp
           sudo bash -c 'curl --silent https://apt.releases.hashicorp.com/gpg | gpg --dearmor > /usr/share/keyrings/hashicorp-archive-keyring.gpg'
           sudo bash -c 'echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com '$(lsb_release -cs)' main" > /etc/apt/sources.list.d/hashicorp.list'
-          echo "/opt/vagrant/bin >> "$GITHUB_PATH"
+          echo "/opt/vagrant/bin" >> ${GITHUB_PATH}
         fi
+      shell: bash
       if: runner.os == 'Linux'
 
     - name: Install Vagrant (Linux)
-      uses: awalsh128/cache-apt-pkgs-action@v1
+      uses: awalsh128/cache-apt-pkgs-action@7ca5f46d061ad9aa95863cd9b214dd48edef361d
       with:
         packages: vagrant
         version: 1.0
       if: runner.os == 'Linux'
 
     - name: Install Provider Dependencies (Linux) (libvirt)
-      uses: awalsh128/cache-apt-pkgs-action@v1
+      uses: awalsh128/cache-apt-pkgs-action@7ca5f46d061ad9aa95863cd9b214dd48edef361d
       with:
         packages: libguestfs-tools libvirt-daemon-system libvirt-dev qemu-system
         version: 1.0
@@ -122,7 +123,7 @@ runs:
       if: runner.os == 'Linux' && env.PROVIDER == 'libvirt'
 
     - name: Install Provider Dependencies (Linux) (virtualbox)
-      uses: awalsh128/cache-apt-pkgs-action@v1
+      uses: awalsh128/cache-apt-pkgs-action@7ca5f46d061ad9aa95863cd9b214dd48edef361d
       with:
         packages: virtualbox
         version: 1.0

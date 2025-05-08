@@ -88,44 +88,54 @@ runs:
       shell: bash
       if: runner.os == 'macOS'
 
-    - uses: abbbi/github-actions-tune@v1
+    - uses: abbbi/github-actions-tune@81fb919e588c20b7ab52b2cac097d2efd765c714
       if: runner.os == 'Linux'
 
-    - name: Pre-install Vagrant (Linux)
+    - name: Cache dependencies (Linux)
+      uses: actions/cache@v4
+      with:
+        key: Cache-${{ ImageOS }}-${{ env.PROVIDER }}-deps
+        path: |
+          /var/cache/apt
+          /var/lib/apt
+      if: runner.os == 'Linux'
+
+    - name: Install/Upgrade/Configure Vagrant (Linux)
+      env:
+        DEBIAN_FRONTEND: noninteractive
       run: |
         if [ "${ImageOS}" = "ubuntu24" ]; then
           # Ubuntu 24.04 no longer provides Vagrant, install from Hashicorp
           sudo bash -c 'curl --silent https://apt.releases.hashicorp.com/gpg | gpg --dearmor > /usr/share/keyrings/hashicorp-archive-keyring.gpg'
           sudo bash -c 'echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com '$(lsb_release -cs)' main" > /etc/apt/sources.list.d/hashicorp.list'
-          echo "/opt/vagrant/bin >> "$GITHUB_PATH"
+          echo "/opt/vagrant/bin" >> ${GITHUB_PATH}
         fi
+        sudo apt-get update
+        sudo apt-get --yes install \
+          vagrant
+      shell: bash
       if: runner.os == 'Linux'
 
-    - name: Install Vagrant (Linux)
-      uses: awalsh128/cache-apt-pkgs-action@v1
-      with:
-        packages: vagrant
-        version: 1.0
-      if: runner.os == 'Linux'
-
-    - name: Install Provider Dependencies (Linux) (libvirt)
-      uses: awalsh128/cache-apt-pkgs-action@v1
-      with:
-        packages: libguestfs-tools libvirt-daemon-system libvirt-dev qemu-system
-        version: 1.0
-      if: runner.os == 'Linux' && env.PROVIDER == 'libvirt'
-
-    - name: Configure Provider Dependencies (Linux) (libvirt)
+    - name: Install/Configure Provider Dependencies (Linux) (libvirt)
+      env:
+        DEBIAN_FRONTEND: noninteractive
       run: |
+        sudo apt-get --yes install \
+          libguestfs-tools \
+          libvirt-daemon-system \
+          libvirt-dev \
+          qemu-system
         sudo setfacl -m user:$USER:rw /var/run/libvirt/libvirt-sock
       shell: bash
       if: runner.os == 'Linux' && env.PROVIDER == 'libvirt'
 
-    - name: Install Provider Dependencies (Linux) (virtualbox)
-      uses: awalsh128/cache-apt-pkgs-action@v1
-      with:
-        packages: virtualbox
-        version: 1.0
+    - name: Install/Configure Provider Dependencies (Linux) (virtualbox)
+      env:
+        DEBIAN_FRONTEND: noninteractive
+      run: |
+        sudo apt-get --yes install \
+          virtualbox
+      shell: bash
       if: runner.os == 'Linux' && env.PROVIDER == 'virtualbox'
 
     - name: Install/Upgrade Vagrant (macOS)

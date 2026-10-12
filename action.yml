@@ -51,6 +51,8 @@ inputs:
       chown vagrant:vagrant ${{ github.workspace }};
       mkdir -p ${{ runner.temp }};
       chown vagrant:vagrant ${{ runner.temp }};
+      mkdir -p ${{ runner.temp }}/../_actions;
+      chown vagrant:vagrant ${{ runner.temp }}/../_actions;
     description: Command(s) to run for provisioning (double quotation marks are not allowed)
     type: string
   save_box_to_cache:
@@ -230,10 +232,12 @@ runs:
         chmod a+x ${{ runner.temp }}/command.sh
         rsync --archive --delete ${{ github.workspace }}/ vagrantbox:${{ github.workspace }}/
         rsync --archive --delete ${{ runner.temp }}/ vagrantbox:${{ runner.temp }}/
+        rsync --archive --delete \$(realpath ${{ runner.temp }}/../_actions)/ vagrantbox:\$(realpath ${{ runner.temp }}/../_actions)/
         vagrant ssh --command "${{ runner.temp }}/command.sh"
         EXIT_STATUS=\$?
         rsync --archive --delete vagrantbox:${{ github.workspace }}/ ${{ github.workspace }}/
         rsync --archive --delete vagrantbox:${{ runner.temp }}/ ${{ runner.temp }}/
+        rsync --archive --delete vagrantbox:\$(realpath ${{ runner.temp }}/../_actions)/ \$(realpath ${{ runner.temp }}/../_actions)/
         exit \${EXIT_STATUS}
         EOF
         sudo mv bash /usr/local/bin/bash

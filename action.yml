@@ -1,256 +1,148 @@
 ---
-name: Start Vagrant Box
-description: Allow running command-line programs via bash shell of VMs provisioned with Vagrant using the run keyword.
+name: Start any VM
+description: Allow running command-line programs via bash shell of VMs provisioned with any VM using the run keyword.
 
 inputs:
-  box:
-    default: generic/arch
-    description: Vagrant Box
-    type: string
-  boot_timeout:
-    default: 1800
-    description: VM Boot Timeout
-    type: string
-  connect_timeout:
-    default: 30
-    description: VM SSH Connect Timeout
-    type: string
-  cpus:
-    default: 2
-    description: VM CPUs
+  arch:
+    default: x86_64
+    description: any VM CPU Architecture
+    options:
+      - aarch64
+      - armv7
+      - i386
+      - loongarch64
+      - powerpc64
+      # - riscv64
+      - s390x
+      - sparc64
+      - x86_64
+    type: choice
+  cpu:
+    default: 4
+    description: any VM CPUs
     options:
       - 2
       - 4
       - 8
     type: choice
-  memory:
-    default: 2048
-    description: VM Memory
+  mem:
+    default: 4096
+    description: any VM Memory
     options:
       - 1024
       - 2048
       - 4096
       - 8192
     type: choice
-  pre_package_commands:
-    default: >-
-      find ${{ github.workspace }} -mindepth 1 -delete;
-      find ${{ runner.temp }} -mindepth 1 -delete;
-    description: Command(s) to run before packaging Vagrant Box (double quotation marks are not allowed)
+  os:
+    description: any VM os
+    required: true
     type: string
-  provider:
-    description: Vagrant provider to use, defaults to libvirt on Linux and virtualbox on macOS
+  provision-commands:
+    description: Command(s) to run for provisioning any VM (double quotation marks are not allowed)
+    type: string
+  release:
+    description: any VM release
+    type: string
+  ssh-port:
+    default: 10022
+    description: any VM SSH port
+    type: string
+  sync:
+    default: rsync
+    description: any VM sync mode
     options:
-      - libvirt
-      - virtualbox
+      - 9p
+      - nfs
+      - rsync
+      - scp
+      - sshfs
+      - sys-nfs
+      - tar
     type: choice
-  provision_commands:
-    default: >-
-      echo 'AcceptEnv *' >> /etc/ssh/sshd_config;
-      mkdir -p ${{ github.workspace }};
-      chown vagrant:vagrant ${{ github.workspace }};
-      mkdir -p ${{ runner.temp }};
-      chown vagrant:vagrant ${{ runner.temp }};
-      mkdir -p $(realpath ${{ runner.temp }}/../_actions);
-      chown vagrant:vagrant $(realpath ${{ runner.temp }}/../_actions);
-    description: Command(s) to run for provisioning (double quotation marks are not allowed)
-    type: string
-  save_box_to_cache:
-    description: Save Vagrant Box to GitHub Actions Cache
-    type: boolean
-  ssh_shell:
-    default: bash
-    description: Shell to be used for `config.ssh.shell` in Vagrantfile
-    type: string
-  use_cached_box:
-    description: Use Vagrant Box from GitHub Actions Cache
-    type: boolean
-  vagrant_box_descriptor:
-    default: /tmp/packaged.box
-    description: Vagrant Box Descriptor <name, url, or path>
-    type: string
-  vagrant_ssh_username:
-    default: vagrant
-    description: SSH Username for `vagrant ssh`
-    type: string
-
 
 runs:
   using: composite
   steps:
-    - name: Set `PROVIDER` (Linux)
+    - name: Install/Configure any VM Dependencies (Linux)
+      env:
+        DEBIAN_FRONTEND: noninteractive
       run: |
-        echo "PROVIDER=${{ inputs.provider || 'libvirt' }}" >> ${GITHUB_ENV}
+        # Install dependencies
+        sudo apt-get --no-install-recommends -y install \
+          ca-certificates \
+          openssh-client \
+          ovmf \
+          qemu-efi-aarch64 \
+          qemu-system-arm \
+          qemu-system-misc \
+          qemu-system-ppc \
+          qemu-system-s390x \
+          qemu-system-sparc \
+          qemu-system-x86 \
+          qemu-utils \
+          u-boot-qemu \
+          xz-utils \
+          zstd
+        # Install anyvm.py
+        pip install anyvm.py
+        # Grant user access to /dev/kvm
+        sudo chown ${USER} /dev/kvm
       shell: bash
       if: runner.os == 'Linux'
 
-    - name: Set `PROVIDER` (macOS)
-      run: |
-        echo "PROVIDER=${{ inputs.provider || 'virtualbox' }}" >> ${GITHUB_ENV}
-      shell: bash
-      if: runner.os == 'macOS'
-
-    - name: Install/Upgrade Vagrant (Linux)
+    - name: Install/Configure any VM Dependencies (macOS)
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
-        if [ "${ImageOS}" = "ubuntu24" ]; then
-          # Ubuntu 24.04 no longer provides Vagrant, install from Hashicorp
-          sudo bash -c 'curl --silent https://apt.releases.hashicorp.com/gpg | gpg --dearmor > /usr/share/keyrings/hashicorp-archive-keyring.gpg'
-          sudo bash -c 'echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com '$(lsb_release -cs)' main" > /etc/apt/sources.list.d/hashicorp.list'
-        fi
-        sudo apt-get update
-        sudo apt-get --yes install \
-          vagrant
-        if [ "${ImageOS}" = "ubuntu24" ]; then
-          # Vagrant from Hashicorp installs a bash wrapper
-          sudo ln --force --symbolic /opt/vagrant/bin/vagrant /usr/bin/vagrant
-        fi
-      shell: bash
-      if: runner.os == 'Linux'
-
-    - name: Install/Configure Provider Dependencies (Linux) (libvirt)
-      env:
-        DEBIAN_FRONTEND: noninteractive
-      run: |
-        sudo apt-get --yes install \
-          libguestfs-tools \
-          libvirt-daemon-system \
-          libvirt-dev \
-          qemu-system
-        sudo setfacl -m user:$USER:rw /var/run/libvirt/libvirt-sock
-      shell: bash
-      if: runner.os == 'Linux' && env.PROVIDER == 'libvirt'
-
-    - name: Install/Configure Provider Dependencies (Linux) (virtualbox)
-      env:
-        DEBIAN_FRONTEND: noninteractive
-      run: |
-        sudo apt-get --yes install \
-          virtualbox
-      shell: bash
-      if: runner.os == 'Linux' && env.PROVIDER == 'virtualbox'
-
-    - name: Install/Upgrade Vagrant (macOS)
-      run: |
-        brew install --cask --force --quiet \
-          vagrant
-      shell: bash
-      if: runner.os == 'macOS'
-
-    - name: Install/Configure Provider Dependencies (macOS) (libvirt)
-      run: |
+        # Install dependencies
         brew install --force --quiet \
-          libvirt \
-          iproute2mac \
-          qemu
-        brew services start libvirt
-        echo "LIBVIRT_DEFAULT_URI=qemu:///session?socket=${HOME}/.cache/libvirt/libvirt-sock" >> ${GITHUB_ENV}
+          anyvm-org/tap/anyvm
       shell: bash
-      if: runner.os == 'macOS' && env.PROVIDER == 'libvirt'
+      if: runner.os == 'macOS'
 
-    - name: Install/Configure Provider Dependencies (macOS) (virtualbox)
+    - name: Start any VM Environment
       run: |
-        brew install --cask --force --quiet \
-          virtualbox
-        # Fix for Vagrant 2.4.1 with VirtualBox 7.1
-        sudo sed -i.bak 's/"7.0" => Version_7_0,/"7.0" => Version_7_0,"7.1" => Version_7_0,/g' $(find /opt/vagrant -name meta.rb | grep virtualbox)
-      shell: bash
-      if: runner.os == 'macOS' && env.PROVIDER == 'virtualbox'
-
-    - name: Cache Vagrant Box
-      if: inputs.save_box_to_cache
-      uses: actions/cache@v4
-      with:
-        path: ${{ inputs.vagrant_box_descriptor }}
-        key: ${{ inputs.box }}-${{ runner.os }}.box
-
-    - name: Add Vagrant Box
-      if: inputs.use_cached_box
-      run: |
-        if [ -f ${{ inputs.vagrant_box_descriptor }} ]; then
-          vagrant box add --name ${{ inputs.box }} ${{ inputs.vagrant_box_descriptor }}
+        anyvm \
+          $(test -n "${{ inputs.arch }}" && echo --arch "${{ inputs.arch }}") \
+          $(test -n "${{ inputs.cpu }}" && echo --cpu "${{ inputs.cpu }}") \
+          $(test -n "${{ inputs.mem }}" && echo --mem "${{ inputs.mem }}") \
+          $(test -n "${{ inputs.release }}" && echo --release "${{ inputs.release }}") \
+          $(test -n "${{ inputs.ssh-port }}" && echo --ssh-port "${{ inputs.ssh-port }}") \
+          $(test -n "${{ inputs.sync }}" && echo --sync "${{ inputs.sync }}") \
+          --detach \
+          --os "${{ inputs.os }}" \
+          --vnc off \
+          -v $(realpath ${{ runner.temp }}/../_actions):$(realpath ${{ runner.temp }}/../_actions) \
+          -v ${{ github.workspace }}:${{ github.workspace }} \
+          -v ${{ runner.temp }}:${{ runner.temp }}
+        if [ -n "${{ inputs.provision-commands }}" ]; then
+          ssh -o LogLevel=ERROR "${{ inputs.ssh-port }}" "sh -c '${{ inputs.provision-commands }}'"
         fi
-      shell: bash
-
-    - name: Install Vagrant libvirt Plugin (libvirt)
-      run: |
-        vagrant plugin install vagrant-libvirt
-      shell: bash
-      if: env.PROVIDER == 'libvirt'
-
-    - name: Generate Vagrantfile
-      run: |
-        cat > Vagrantfile <<EOF
-          Vagrant.configure("2") do |config|
-            config.ssh.compression = false
-            config.ssh.connect_timeout = ${{ inputs.connect_timeout }}
-            config.ssh.forward_env = ["*"]
-            config.ssh.shell = "${{ inputs.ssh_shell }}"
-            config.ssh.username = "${{ inputs.vagrant_ssh_username }}"
-            config.vm.boot_timeout = ${{ inputs.boot_timeout }}
-            config.vm.box = "${{ inputs.box }}"
-            config.vm.box_check_update = false
-            config.vm.provider :${{ env.PROVIDER }} do |v|
-              v.cpus = ${{ inputs.cpus }}
-              ${{ (runner.os == 'Linux' && env.PROVIDER == 'libvirt') && 'v.driver = "kvm"' || '' }}
-              v.memory = ${{ inputs.memory }}
-            end
-            config.vm.provision "shell", inline: "${{ inputs.provision_commands }}"
-            config.vm.synced_folder ".", "/vagrant", disabled: true
-          end
-        EOF
-      shell: bash
-
-    - name: Show Vagrant Status
-      run: |
-        vagrant status
-      shell: bash
-
-    - name: Start Vagrant Environment
-      run: |
-        vagrant up --provider ${{ env.PROVIDER }}
-      shell: bash
-
-    - name: Save OpenSSH configuration to ~/.ssh/config
-      run: |
-        mkdir -p ~/.ssh
-        vagrant ssh-config --host vagrantbox >> ~/.ssh/config
       shell: bash
 
     - name: Generate /bin/bash override script
       run: |
         cat > bash <<EOF
         #!/bin/bash
-        set -euxo pipefail
+        set -euo pipefail
         SCRIPT=\$(mktemp)
         echo "#!/usr/bin/env bash" >> \${SCRIPT}
         echo "cd \${PWD}" >> \${SCRIPT}
-        echo "set -euxo pipefail" >> \${SCRIPT}
+        echo "set -euo pipefail" >> \${SCRIPT}
         echo "bash \$@" >> \${SCRIPT}
         mv \${SCRIPT} ${{ runner.temp }}/command.sh
         chmod a+x ${{ runner.temp }}/command.sh
-        rsync --archive --delete ${{ github.workspace }}/ vagrantbox:${{ github.workspace }}/
-        rsync --archive --delete ${{ runner.temp }}/ vagrantbox:${{ runner.temp }}/
-        rsync --archive --delete \$(realpath ${{ runner.temp }}/../_actions)/ vagrantbox:\$(realpath ${{ runner.temp }}/../_actions)/
-        vagrant ssh --command "${{ runner.temp }}/command.sh"
+        rsync --archive --delete --rsh "ssh -o LogLevel=ERROR" ${{ github.workspace }}/ "${{ inputs.ssh-port }}":${{ github.workspace }}/
+        rsync --archive --delete --rsh "ssh -o LogLevel=ERROR" ${{ runner.temp }}/ "${{ inputs.ssh-port }}":${{ runner.temp }}/
+        rsync --archive --delete --rsh "ssh -o LogLevel=ERROR" \$(realpath ${{ runner.temp }}/../_actions)/ "${{ inputs.ssh-port }}":\$(realpath ${{ runner.temp }}/../_actions)/
+        ssh -o LogLevel=ERROR "${{ inputs.ssh-port }}" "${{ runner.temp }}/command.sh"
         EXIT_STATUS=\$?
-        rsync --archive --delete vagrantbox:${{ github.workspace }}/ ${{ github.workspace }}/
-        rsync --archive --delete vagrantbox:${{ runner.temp }}/ ${{ runner.temp }}/
-        rsync --archive --delete vagrantbox:\$(realpath ${{ runner.temp }}/../_actions)/ \$(realpath ${{ runner.temp }}/../_actions)/
+        rsync --archive --delete --rsh "ssh -o LogLevel=ERROR" "${{ inputs.ssh-port }}":${{ github.workspace }}/ ${{ github.workspace }}/
+        rsync --archive --delete --rsh "ssh -o LogLevel=ERROR" "${{ inputs.ssh-port }}":${{ runner.temp }}/ ${{ runner.temp }}/
+        rsync --archive --delete --rsh "ssh -o LogLevel=ERROR" "${{ inputs.ssh-port }}":\$(realpath ${{ runner.temp }}/../_actions)/ \$(realpath ${{ runner.temp }}/../_actions)/
         exit \${EXIT_STATUS}
         EOF
         sudo mv bash /usr/local/bin/bash
         sudo chmod +x /usr/local/bin/bash
       shell: bash
-
-    - name: Package Vagrant Box
-      if: inputs.save_box_to_cache
-      uses: gacts/run-and-post-run@v1
-      with:
-        post: >-
-          if [ ! -f ${{ inputs.vagrant_box_descriptor }} ]; then
-          vagrant ssh --command "${{ inputs.pre_package_commands }}";
-          vagrant package --output ${{ inputs.vagrant_box_descriptor }};
-          fi
-        post-shell: /bin/bash

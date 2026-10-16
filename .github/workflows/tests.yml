@@ -5,121 +5,63 @@ on:
   push:
 
 jobs:
-  Ubuntu:
-    name: ${{ matrix.runs-on }} (${{ matrix.box }}) (${{ matrix.provider }})
+  Alpine:
+    name: ${{ matrix.runs-on }}
     runs-on: ${{ matrix.runs-on }}
     strategy:
       matrix:
-        box:
-          - generic/arch
-        provider:
-          - libvirt
-          - virtualbox
+        os:
+          - alpine
         runs-on:
+          - macos-15
+          - macos-26
+          - macos-latest
           - ubuntu-22.04
+          - ubuntu-24.04
+          - ubuntu-26.04
           - ubuntu-latest
-        save_box_to_cache:
-          - false
-        include:
-          - box: generic/arch
-            provider: libvirt
-            runs-on: ubuntu-latest
-            save_box_to_cache: true
       fail-fast: false
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set `CPUS`
         run: |
           echo "CPUS=$(nproc)" >> ${GITHUB_ENV}
 
       - name: Provision VM
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         uses: ./
         with:
-          box: ${{ matrix.box }}
-          cpus: ${{ env.CPUS }}
-          provider: ${{ matrix.provider }}
-          save_box_to_cache: ${{ matrix.save_box_to_cache }}
+          cpu: ${{ env.CPUS }}
+          os: ${{ matrix.os }}
+          provision-commands: "apk update; apk add bash git sudo;"
 
       - name: Run Test (/etc/os-release) (VM)
         run: |
           source /etc/os-release
-          if [ "${NAME}" = "Arch Linux" ]; then
-            echo "Arch Linux detected."
+          if [ "${NAME}" = "Alpine Linux" ]; then
+            echo "Alpine Linux detected."
           else
-            echo "Arch Linux not detected."
+            echo "Alpine Linux not detected."
             exit 1
           fi
         shell: bash --noprofile --norc -euo pipefail {0}
 
-      - name: Run Test (/etc/os-release) (Host)
+      - name: Run Test (/etc/os-release) (Host) (Linux)
         run: |
           source /etc/os-release
-          if [ "${NAME}" = "Arch Linux" ]; then
-            echo "Arch Linux detected."
-            exit 1
+          if [ "${NAME}" = "Ubuntu" ]; then
+            echo "Ubuntu detected."
           else
-            echo "Arch Linux not detected."
+            echo "Ubuntu not detected."
+            exit 1
           fi
         shell: /bin/bash --noprofile --norc -euo pipefail {0}
+        if: runner.os == 'Linux'
 
-      - name: Prepare Test (working-directory) (VM)
-        run: |
-          mkdir new_working_directory
-        shell: bash --noprofile --norc -euo pipefail {0}
-
-      - name: Run Test (working-directory) (VM)
-        run: |
-          if [ "$(basename ${PWD})" = "new_working_directory" ]; then
-            echo "Expected working directory detected."
-          else
-            echo "Expected working directory not detected."
-            exit 1
-          fi
-        shell: bash --noprofile --norc -euo pipefail {0}
-        working-directory: new_working_directory
-
-  macOS:
-    name: ${{ matrix.runs-on }} (${{ matrix.box }}) (${{ matrix.provider }})
-    runs-on: ${{ matrix.runs-on }}
-    strategy:
-      matrix:
-        box:
-          - generic/arch
-        provider:
-          - libvirt
-          - virtualbox
-        runs-on:
-          - macos-13
-      fail-fast: false
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set `CPUS`
-        run: |
-          echo "CPUS=$(getconf _NPROCESSORS_ONLN)" >> ${GITHUB_ENV}
-
-      - name: Provision VM
-        uses: ./
-        with:
-          box: ${{ matrix.box }}
-          cpus: ${{ env.CPUS }}
-          provider: ${{ matrix.provider }}
-
-      - name: Run Test (/etc/os-release) (VM)
-        run: |
-          source /etc/os-release
-          if [ "${NAME}" = "Arch Linux" ]; then
-            echo "Arch Linux detected."
-          else
-            echo "Arch Linux not detected."
-            exit 1
-          fi
-        shell: bash --noprofile --norc -euo pipefail {0}
-
-      - name: Run Test (uname) (Host)
+      - name: Run Test (uname) (Host) (macOS)
         run: |
           if [ "$(uname -s)" = "Darwin" ]; then
             echo "Darwin detected."
@@ -128,6 +70,7 @@ jobs:
             exit 1
           fi
         shell: /bin/bash --noprofile --norc -euo pipefail {0}
+        if: runner.os == 'macOS'
 
       - name: Prepare Test (working-directory) (VM)
         run: |

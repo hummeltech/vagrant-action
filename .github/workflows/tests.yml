@@ -87,3 +87,16 @@ jobs:
           fi
         shell: bash --noprofile --norc -euo pipefail {0}
         working-directory: new_working_directory
+
+      - name: Run Test (env) (VM)
+        env:
+          NEW_ENV_VAR: 1
+        run: |
+          if [ "${NEW_ENV_VAR}" = "1" ]; then
+            echo "Expected variable set."
+          else
+            echo "Expected variable not set."
+            exit 1
+          fi
+        shell: bash --noprofile --norc -euo pipefail {0}
+        working-directory: new_working_directory

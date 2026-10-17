@@ -25,6 +25,9 @@ inputs:
       - 4
       - 8
     type: choice
+  enable-ipv6:
+    default: false
+    type: boolean
   mem:
     default: 4096
     description: any VM Memory
@@ -101,25 +104,41 @@ runs:
       shell: bash
       if: runner.os == 'macOS'
 
-    - name: Start any VM Environment
+    - name: Configure SSH
+      run: |
+        mkdir -p ~/.ssh
+        touch ~/.ssh/config
+        chmod 600 ~/.ssh/config
+        cat >> ~/.ssh/config <<EOF
+        Host *
+          LogLevel=ERROR
+          SendEnv=*
+        EOF
+      shell: bash
+
+    - name: Start any VM
       run: |
         anyvm \
-          $(test -n "${{ inputs.arch }}" && echo --arch "${{ inputs.arch }}") \
-          $(test -n "${{ inputs.cpu }}" && echo --cpu "${{ inputs.cpu }}") \
-          $(test -n "${{ inputs.mem }}" && echo --mem "${{ inputs.mem }}") \
-          $(test -n "${{ inputs.release }}" && echo --release "${{ inputs.release }}") \
-          $(test -n "${{ inputs.ssh-port }}" && echo --ssh-port "${{ inputs.ssh-port }}") \
-          $(test -n "${{ inputs.sync }}" && echo --sync "${{ inputs.sync }}") \
+          ${{ inputs.arch != '' && format('--arch {0}', inputs.arch) || '' }} \
+          ${{ inputs.cpu != '' && format('--cpu {0}', inputs.cpu) || '' }} \
+          ${{ inputs.enable-ipv6 && '--enable-ipv6' || '' }} \
+          ${{ inputs.mem != '' && format('--mem {0}', inputs.mem) || '' }} \
+          ${{ inputs.release != '' && format('--release {0}', inputs.release) || '' }} \
+          ${{ inputs.ssh-port != '' && format('--ssh-port {0}', inputs.ssh-port) || '' }} \
+          ${{ inputs.sync != '' && format('--sync {0}', inputs.sync) || '' }} \
           --detach \
           --os "${{ inputs.os }}" \
           --vnc off \
           -v $(realpath ${{ runner.temp }}/../_actions):$(realpath ${{ runner.temp }}/../_actions) \
           -v ${{ github.workspace }}:${{ github.workspace }} \
           -v ${{ runner.temp }}:${{ runner.temp }}
-        if [ -n "${{ inputs.provision-commands }}" ]; then
-          ssh -o LogLevel=ERROR "${{ inputs.ssh-port }}" "sh -c '${{ inputs.provision-commands }}'"
-        fi
       shell: bash
+
+    - name: Provision any VM
+      run: |
+        ssh "${{ inputs.ssh-port }}" "sh -c '${{ inputs.provision-commands }}'"
+      shell: bash
+      if: inputs.provision-commands != ''
 
     - name: Generate /bin/bash override script
       run: |
@@ -133,14 +152,14 @@ runs:
         echo "bash \$@" >> \${SCRIPT}
         mv \${SCRIPT} ${{ runner.temp }}/command.sh
         chmod a+x ${{ runner.temp }}/command.sh
-        rsync --archive --delete --rsh "ssh -o LogLevel=ERROR" ${{ github.workspace }}/ "${{ inputs.ssh-port }}":${{ github.workspace }}/
-        rsync --archive --delete --rsh "ssh -o LogLevel=ERROR" ${{ runner.temp }}/ "${{ inputs.ssh-port }}":${{ runner.temp }}/
-        rsync --archive --delete --rsh "ssh -o LogLevel=ERROR" \$(realpath ${{ runner.temp }}/../_actions)/ "${{ inputs.ssh-port }}":\$(realpath ${{ runner.temp }}/../_actions)/
-        ssh -o LogLevel=ERROR "${{ inputs.ssh-port }}" "${{ runner.temp }}/command.sh"
+        rsync --archive --delete ${{ github.workspace }}/ "${{ inputs.ssh-port }}":${{ github.workspace }}/
+        rsync --archive --delete ${{ runner.temp }}/ "${{ inputs.ssh-port }}":${{ runner.temp }}/
+        rsync --archive --delete \$(realpath ${{ runner.temp }}/../_actions)/ "${{ inputs.ssh-port }}":\$(realpath ${{ runner.temp }}/../_actions)/
+        ssh "${{ inputs.ssh-port }}" "${{ runner.temp }}/command.sh"
         EXIT_STATUS=\$?
-        rsync --archive --delete --rsh "ssh -o LogLevel=ERROR" "${{ inputs.ssh-port }}":${{ github.workspace }}/ ${{ github.workspace }}/
-        rsync --archive --delete --rsh "ssh -o LogLevel=ERROR" "${{ inputs.ssh-port }}":${{ runner.temp }}/ ${{ runner.temp }}/
-        rsync --archive --delete --rsh "ssh -o LogLevel=ERROR" "${{ inputs.ssh-port }}":\$(realpath ${{ runner.temp }}/../_actions)/ \$(realpath ${{ runner.temp }}/../_actions)/
+        rsync --archive --delete "${{ inputs.ssh-port }}":${{ github.workspace }}/ ${{ github.workspace }}/
+        rsync --archive --delete "${{ inputs.ssh-port }}":${{ runner.temp }}/ ${{ runner.temp }}/
+        rsync --archive --delete "${{ inputs.ssh-port }}":\$(realpath ${{ runner.temp }}/../_actions)/ \$(realpath ${{ runner.temp }}/../_actions)/
         exit \${EXIT_STATUS}
         EOF
         sudo mv bash /usr/local/bin/bash
